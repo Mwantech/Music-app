@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { useAuth } from '../_layout';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Link } from 'expo-router';
+import { Link, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -26,6 +26,7 @@ const LoginScreen = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const { signIn } = useAuth();
+  const router = useRouter();
 
   const validateForm = () => {
     if (!email.trim()) {
@@ -68,7 +69,9 @@ const LoginScreen = () => {
 
       // Sign in with token and user data
       await signIn(data.token, data.user);
-      // Navigation is handled by the useProtectedRoute hook
+      
+      // Add explicit navigation after successful login
+      router.replace('/(tabs)');
 
     } catch (error) {
       setError(error.message || 'Login failed. Please try again.');

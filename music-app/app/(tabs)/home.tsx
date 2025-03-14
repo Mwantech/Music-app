@@ -7,8 +7,7 @@ import {
   ScrollView, 
   Image, 
   Alert,
-  Modal,
-  FlatList 
+  Modal
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -16,14 +15,13 @@ import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import AddPlaylistForm from '../components/AddPlaylistForm';
 import PlaylistView from '../components/PlaylistView';
 
-const HomeScreen = () => {
+export default function HomeScreen() {
   const [userData, setUserData] = useState(null);
   const [recentSongs, setRecentSongs] = useState([]);
   const [playlists, setPlaylists] = useState([]);
   const [showAddForm, setShowAddForm] = useState(false);
   const [showPlaylistView, setShowPlaylistView] = useState(false);
   const [currentPlaylist, setCurrentPlaylist] = useState(null);
-  const [activeTab, setActiveTab] = useState('home');
   const [featuredPlaylists, setFeaturedPlaylists] = useState([]);
   const [topArtists, setTopArtists] = useState([]);
 
@@ -48,17 +46,17 @@ const HomeScreen = () => {
 
         // Sample data for featured playlists and top artists
         setFeaturedPlaylists([
-          { id: '1', name: 'Chill Vibes', songs: 24, cover: require('@/assets/images/burnaboy.jpeg') },
-          { id: '2', name: 'Workout Mix', songs: 18, cover: require('@/assets/images/burnaboy.jpeg') },
-          { id: '3', name: 'Road Trip', songs: 32, cover: require('@/assets/images/burnaboy.jpeg') },
-          { id: '4', name: 'Party Hits', songs: 40, cover: require('@/assets/images/burnaboy.jpeg') }
+          { id: '1', name: 'Chill Vibes', songs: 24, cover: require('../../assets/images/burnaboy.jpeg') },
+          { id: '2', name: 'Workout Mix', songs: 18, cover: require('../../assets/images/burnaboy.jpeg') },
+          { id: '3', name: 'Road Trip', songs: 32, cover: require('../../assets/images/burnaboy.jpeg') },
+          { id: '4', name: 'Party Hits', songs: 40, cover: require('../../assets/images/burnaboy.jpeg') }
         ]);
 
         setTopArtists([
-          { id: '1', name: 'The Weeknd', genre: 'R&B / Pop', image: require('@/assets/images/chriss.jpeg') },
-          { id: '2', name: 'Taylor Swift', genre: 'Pop', image: require('@/assets/images/burnaboy.jpeg') },
-          { id: '3', name: 'Kendrick Lamar', genre: 'Hip-Hop', image: require('@/assets/images/joeboy.jpeg') },
-          { id: '4', name: 'Dua Lipa', genre: 'Pop', image: require('@/assets/images/postmalone.jpeg') }
+          { id: '1', name: 'The Weeknd', genre: 'R&B / Pop', image: require('../../assets/images/chriss.jpeg') },
+          { id: '2', name: 'Taylor Swift', genre: 'Pop', image: require('../../assets/images/burnaboy.jpeg') },
+          { id: '3', name: 'Kendrick Lamar', genre: 'Hip-Hop', image: require('../../assets/images/joeboy.jpeg') },
+          { id: '4', name: 'Dua Lipa', genre: 'Pop', image: require('../../assets/images/postmalone.jpeg') }
         ]);
       } catch (error) {
         console.error('Error loading data:', error);
@@ -78,7 +76,7 @@ const HomeScreen = () => {
         isPublic: playlistData.isPublic,
         songs: [],
         createdAt: new Date().toISOString(),
-        coverImage: playlistData.coverImage || require('@/assets/images/burnaboy.jpeg')
+        coverImage: playlistData.coverImage || require('../../assets/images/burnaboy.jpeg')
       };
 
       // Update state
@@ -114,129 +112,6 @@ const HomeScreen = () => {
     }
   };
 
-  const renderHomeTab = () => (
-    <>
-      {/* Featured Section */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Featured Playlists</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScrollContent}>
-          {featuredPlaylists.map(playlist => (
-            <TouchableOpacity 
-              key={playlist.id} 
-              style={styles.featuredItem}
-              onPress={() => viewPlaylist(playlist)}
-            >
-              <Image source={playlist.cover} style={styles.featuredCover} />
-              <Text style={styles.featuredTitle}>{playlist.name}</Text>
-              <Text style={styles.featuredSubtitle}>{playlist.songs} songs</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-
-      {/* Top Artists Section */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Top Artists</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScrollContent}>
-          {topArtists.map(artist => (
-            <TouchableOpacity 
-              key={artist.id} 
-              style={styles.artistItem}
-            >
-              <Image source={artist.image} style={styles.artistImage} />
-              <Text style={styles.artistName}>{artist.name}</Text>
-              <Text style={styles.artistGenre}>{artist.genre}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-
-      {/* Recently Played Section */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Recently Played</Text>
-        {recentSongs.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyStateText}>No recently played songs</Text>
-            <Text style={styles.emptyStateAction}>Start listening to see your history</Text>
-          </View>
-        ) : (
-          recentSongs.slice(0, 5).map(song => (
-            <TouchableOpacity 
-              key={song.id} 
-              style={styles.songCard}
-              onPress={() => playSong(song)}
-            >
-              <Image source={song.cover} style={styles.songCover} />
-              <View style={styles.songDetails}>
-                <Text style={styles.songTitle}>{song.title}</Text>
-                <Text style={styles.songArtist}>{song.artist}</Text>
-              </View>
-              <TouchableOpacity style={styles.playButton}>
-                <Ionicons name="play-circle" size={36} color="#8A2BE2" />
-              </TouchableOpacity>
-            </TouchableOpacity>
-          ))
-        )}
-      </View>
-    </>
-  );
-
-  const renderPlaylistsTab = () => (
-    <>
-      {/* Quick Create Section */}
-      <View style={styles.quickActions}>
-        <TouchableOpacity 
-          style={styles.actionCard}
-          onPress={() => setShowAddForm(true)}
-        >
-          <Ionicons name="add-circle" size={32} color="#8A2BE2" />
-          <Text style={styles.actionText}>Create Playlist</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={styles.actionCard}
-        >
-          <Ionicons name="shuffle" size={32} color="#8A2BE2" />
-          <Text style={styles.actionText}>Smart Mix</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Your Playlists Section */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Your Playlists</Text>
-        {playlists.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyStateText}>No playlists yet</Text>
-            <TouchableOpacity onPress={() => setShowAddForm(true)}>
-              <Text style={styles.emptyStateAction}>Create your first playlist</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          playlists.map(playlist => (
-            <TouchableOpacity 
-              key={playlist.id} 
-              style={styles.playlistCard}
-              onPress={() => viewPlaylist(playlist)}
-            >
-              <Image 
-                source={typeof playlist.coverImage === 'string' 
-                  ? { uri: playlist.coverImage } 
-                  : playlist.coverImage} 
-                style={styles.playlistCardCover} 
-              />
-              <View style={styles.playlistDetails}>
-                <Text style={styles.playlistName}>{playlist.name}</Text>
-                <Text style={styles.playlistSongs}>
-                  {playlist.songs.length} {playlist.songs.length === 1 ? 'song' : 'songs'}
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={24} color="#666" />
-            </TouchableOpacity>
-          ))
-        )}
-      </View>
-    </>
-  );
-
   return (
     <View style={styles.container}>
       {/* Header Section */}
@@ -255,40 +130,75 @@ const HomeScreen = () => {
         </View>
       </LinearGradient>
 
-      {/* Tab Navigation */}
-      <View style={styles.tabBar}>
-        <TouchableOpacity 
-          style={[styles.tab, activeTab === 'home' && styles.activeTab]}
-          onPress={() => setActiveTab('home')}
-        >
-          <Ionicons 
-            name="home" 
-            size={24} 
-            color={activeTab === 'home' ? '#8A2BE2' : '#666'} 
-          />
-          <Text style={[styles.tabText, activeTab === 'home' && styles.activeTabText]}>Home</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={[styles.tab, activeTab === 'playlists' && styles.activeTab]}
-          onPress={() => setActiveTab('playlists')}
-        >
-          <Ionicons 
-            name="list" 
-            size={24} 
-            color={activeTab === 'playlists' ? '#8A2BE2' : '#666'} 
-          />
-          <Text style={[styles.tabText, activeTab === 'playlists' && styles.activeTabText]}>Playlists</Text>
-        </TouchableOpacity>
-      </View>
-
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {activeTab === 'home' ? renderHomeTab() : renderPlaylistsTab()}
+        {/* Featured Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Featured Playlists</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScrollContent}>
+            {featuredPlaylists.map(playlist => (
+              <TouchableOpacity 
+                key={playlist.id} 
+                style={styles.featuredItem}
+                onPress={() => viewPlaylist(playlist)}
+              >
+                <Image source={playlist.cover} style={styles.featuredCover} />
+                <Text style={styles.featuredTitle}>{playlist.name}</Text>
+                <Text style={styles.featuredSubtitle}>{playlist.songs} songs</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+
+        {/* Top Artists Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Top Artists</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScrollContent}>
+            {topArtists.map(artist => (
+              <TouchableOpacity 
+                key={artist.id} 
+                style={styles.artistItem}
+              >
+                <Image source={artist.image} style={styles.artistImage} />
+                <Text style={styles.artistName}>{artist.name}</Text>
+                <Text style={styles.artistGenre}>{artist.genre}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </View>
+
+        {/* Recently Played Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Recently Played</Text>
+          {recentSongs.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>No recently played songs</Text>
+              <Text style={styles.emptyStateAction}>Start listening to see your history</Text>
+            </View>
+          ) : (
+            recentSongs.slice(0, 5).map(song => (
+              <TouchableOpacity 
+                key={song.id} 
+                style={styles.songCard}
+                onPress={() => playSong(song)}
+              >
+                <Image source={song.cover} style={styles.songCover} />
+                <View style={styles.songDetails}>
+                  <Text style={styles.songTitle}>{song.title}</Text>
+                  <Text style={styles.songArtist}>{song.artist}</Text>
+                </View>
+                <TouchableOpacity style={styles.playButton}>
+                  <Ionicons name="play-circle" size={36} color="#8A2BE2" />
+                </TouchableOpacity>
+              </TouchableOpacity>
+            ))
+          )}
+        </View>
       </ScrollView>
 
       {/* Now Playing Bar */}
       <View style={styles.nowPlayingBar}>
         <Image 
-          source={require('@/assets/images/burnaboy.jpeg')} 
+          source={require('../../assets/images/burnaboy.jpeg')} 
           style={styles.nowPlayingCover} 
         />
         <View style={styles.nowPlayingInfo}>
@@ -344,7 +254,7 @@ const HomeScreen = () => {
       )}
     </View>
   );
-};
+}
 
 const styles = StyleSheet.create({
   container: {

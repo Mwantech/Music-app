@@ -173,7 +173,7 @@ const WelcomeScreen = () => {
             </>
           ) : (
             <>
-              <Link href="/signup" asChild>
+              <Link href="/(auth)/signup" asChild>
                 <Pressable
                   style={({ pressed }) => [
                     styles.getStartedButton,
@@ -191,7 +191,7 @@ const WelcomeScreen = () => {
                 </Pressable>
               </Link>
 
-              <Link href="/login" asChild>
+              <Link href="/(auth)/login" asChild>
                 <Pressable style={styles.loginLink}>
                   <Text style={styles.loginText}>
                     Already have an account? <Text style={styles.loginBold}>Log In</Text>
