@@ -91,7 +91,7 @@ const WelcomeScreen = () => {
             style={styles.logo}
             resizeMode="contain"
           />
-          <Text style={styles.appName}>Rhythmix</Text>
+          <Text style={styles.appName}>TuneWave</Text>
         </View>
 
         <Animated.FlatList

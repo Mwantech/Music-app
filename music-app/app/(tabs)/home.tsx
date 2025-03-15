@@ -7,15 +7,18 @@ import {
   ScrollView, 
   Image, 
   Alert,
-  Modal
+  Modal,
+  Platform,
+  PermissionsAndroid
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
+import { Ionicons, FontAwesome5, MaterialIcons } from '@expo/vector-icons';
+
 import AddPlaylistForm from '../components/AddPlaylistForm';
 import PlaylistView from '../components/PlaylistView';
 
-export default function HomeScreen() {
+export default function HomeScreen({ navigation, setCurrentSong, currentSong }) {
   const [userData, setUserData] = useState(null);
   const [recentSongs, setRecentSongs] = useState([]);
   const [playlists, setPlaylists] = useState([]);
@@ -79,13 +82,9 @@ export default function HomeScreen() {
         coverImage: playlistData.coverImage || require('../../assets/images/burnaboy.jpeg')
       };
 
-      // Update state
       const updatedPlaylists = [...playlists, newPlaylist];
       setPlaylists(updatedPlaylists);
-
-      // Save to AsyncStorage
       await AsyncStorage.setItem('playlists', JSON.stringify(updatedPlaylists));
-
       Alert.alert('Success', 'Playlist has been created');
     } catch (error) {
       console.error('Error adding playlist:', error);
@@ -100,8 +99,11 @@ export default function HomeScreen() {
 
   const playSong = async (song) => {
     try {
-      // In a real app, this would trigger the music player
-      Alert.alert('Playing', `Now playing: ${song.title} by ${song.artist}`);
+      // Set the current song to play
+      setCurrentSong(song);
+      
+      // Navigate to the now playing screen
+      navigation.navigate('NowPlaying');
       
       // Add to recent songs
       const updatedRecentSongs = [song, ...recentSongs.filter(s => s.id !== song.id)].slice(0, 10);
@@ -195,29 +197,6 @@ export default function HomeScreen() {
         </View>
       </ScrollView>
 
-      {/* Now Playing Bar */}
-      <View style={styles.nowPlayingBar}>
-        <Image 
-          source={require('../../assets/images/burnaboy.jpeg')} 
-          style={styles.nowPlayingCover} 
-        />
-        <View style={styles.nowPlayingInfo}>
-          <Text style={styles.nowPlayingTitle}>Blinding Lights</Text>
-          <Text style={styles.nowPlayingArtist}>The Weeknd</Text>
-        </View>
-        <View style={styles.playbackControls}>
-          <TouchableOpacity style={styles.playbackButton}>
-            <Ionicons name="play-skip-back" size={24} color="#333" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.playbackButton}>
-            <Ionicons name="pause" size={30} color="#333" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.playbackButton}>
-            <Ionicons name="play-skip-forward" size={24} color="#333" />
-          </TouchableOpacity>
-        </View>
-      </View>
-
       {/* Add Playlist Modal */}
       <Modal
         visible={showAddForm}
@@ -288,33 +267,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  tabBar: {
-    flexDirection: 'row',
-    backgroundColor: '#FFF',
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#EFEFEF',
-  },
-  tab: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    paddingVertical: 8,
-  },
-  activeTab: {
-    borderBottomWidth: 2,
-    borderBottomColor: '#8A2BE2',
-  },
-  tabText: {
-    marginLeft: 5,
-    fontSize: 14,
-    color: '#666',
-  },
-  activeTabText: {
-    color: '#8A2BE2',
-    fontWeight: '600',
   },
   scrollContent: {
     paddingBottom: 20,
@@ -421,91 +373,9 @@ const styles = StyleSheet.create({
   playButton: {
     padding: 5,
   },
-  quickActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-  },
-  actionCard: {
-    width: '48%',
-    backgroundColor: '#F0E6FF',
-    borderRadius: 12,
-    padding: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  actionText: {
-    marginTop: 10,
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#8A2BE2',
-  },
-  playlistCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f9f9f9',
-    borderRadius: 10,
-    marginBottom: 10,
-    padding: 10,
-  },
-  playlistCardCover: {
-    width: 60,
-    height: 60,
-    borderRadius: 5,
-  },
-  playlistDetails: {
-    flex: 1,
-    marginLeft: 15,
-  },
-  playlistName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-  },
-  playlistSongs: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 3,
-  },
-  nowPlayingBar: {
-    height: 60,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f0f0f0',
-    borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
-    paddingHorizontal: 15,
-  },
-  nowPlayingCover: {
-    width: 40,
-    height: 40,
-    borderRadius: 4,
-  },
-  nowPlayingInfo: {
-    flex: 1,
-    marginLeft: 15,
-  },
-  nowPlayingTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#333',
-  },
-  nowPlayingArtist: {
-    fontSize: 13,
-    color: '#666',
-  },
-  playbackControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  playbackButton: {
-    padding: 5,
-    marginLeft: 10,
-  },
   modalContainer: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end',
-  }
+  },
 });

@@ -1,6 +1,5 @@
-// dbconfig.js for XAMPP MySQL
 require('dotenv').config();
-const mysql = require('mysql2');
+const mysql = require('mysql2/promise');  // Changed to promise version
 
 const db = mysql.createPool({
   host: process.env.DB_HOST || 'localhost',
@@ -14,14 +13,17 @@ const db = mysql.createPool({
   queueLimit: 0
 });
 
-// Test connection
-db.getConnection((err, connection) => {
-  if (err) {
+// Test connection (adjusted for promises)
+async function testConnection() {
+  try {
+    const connection = await db.getConnection();
+    console.log('Successfully connected to XAMPP MySQL');
+    connection.release();
+  } catch (err) {
     console.error('Error connecting to XAMPP MySQL:', err);
-    return;
   }
-  console.log('Successfully connected to XAMPP MySQL');
-  connection.release();
-});
+}
+
+testConnection();
 
 module.exports = db;

@@ -104,7 +104,7 @@ const SignUpScreen = () => {
                   source={{ uri: 'https://place-hold.it/100x100/f0f/fff&text=LOGO' }} 
                   style={styles.logo} 
                 />
-                <Text style={styles.appName}>Rhythm</Text>
+                <Text style={styles.appName}>TuneWave</Text>
               </View>
               
               <Text style={styles.title}>Join the Beat</Text>
