@@ -1,3 +1,4 @@
+// services/spotify.tsx
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Buffer } from 'buffer';
 import { SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET } from '../api-config/spotify';
@@ -6,7 +7,10 @@ import { SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET } from '../api-config/spotify'
 const AUTH_URL = 'https://accounts.spotify.com/api/token';
 const API_URL = 'https://api.spotify.com/v1';
 
-// Get access token using client credentials flow
+// Store your personal access token
+const PERSONAL_ACCESS_TOKEN = 'BQCAapQUqA0Zt4I7VlTlINVfRrl2eaWFRciAcqEIX0-IFkoWvVliij37YHtwjtUyNzkZ1ejzIR5dSYTSHeJbHT9CNgxsRoWF0ac0o2kax_u9O5TwHdaNxIpxCKH_LQs1wU2QGGWCM3nBLY57HEogP3pR5u1ha_DWcVVd01DfOQYETiMNHULBL5LV8VRTmTfSAwPlVKgT_uPY31K-SwNSamM80E2Y6GE0sgPX2iRislpPCUT2W1zrqF-krKyyOd7F6ojpTaES4ZbyCL8M5WMvf7XcrsQkFuL4En-IkypmWyVsNuqjqOgzn3yYqpcw';
+
+// Get access token using client credentials flow for non-personalized API calls
 const getAccessToken = async () => {
   try {
     // Check if we have a cached token that's not expired
@@ -55,178 +59,261 @@ const getAccessToken = async () => {
   }
 };
 
-// API request helper
-const apiRequest = async (endpoint, options = {}) => {
+// API request helper with option to use personal token
+const fetchWebApi = async (endpoint: string, method: string = 'GET', body: any = null, usePersonalToken: boolean = false) => {
   try {
-    const token = await getAccessToken();
+    // Use personal token for personalized endpoints or client credentials for public endpoints
+    const token = usePersonalToken ? PERSONAL_ACCESS_TOKEN : await getAccessToken();
     
-    const response = await fetch(`${API_URL}${endpoint}`, {
-      ...options,
+    const options: RequestInit = {
+      method,
       headers: {
         'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        ...options.headers
+        'Content-Type': 'application/json'
       }
-    });
+    };
     
-    // Handle 404 Not Found errors specifically
-    if (response.status === 404) {
-      console.warn(`Endpoint not found: ${endpoint}`);
-      // Return empty data structure instead of throwing error
-      return { items: [], playlists: { items: [] }, albums: { items: [] }, artists: { items: [] }, tracks: { items: [] } };
+    if (body && method !== 'GET') {
+      options.body = JSON.stringify(body);
     }
     
-    const data = await response.json();
+    const response = await fetch(`${API_URL}${endpoint}`, options);
     
+    // Check if the response is OK before trying to parse JSON
     if (!response.ok) {
-      throw new Error(`Spotify API error: ${data.error?.message || data.error || 'Unknown error'}`);
+      const errorText = await response.text();
+      let errorMessage = 'Unknown error';
+      
+      try {
+        const errorData = JSON.parse(errorText);
+        errorMessage = errorData.error?.message || errorData.error_description || errorData.error || 'Unknown error';
+      } catch (e) {
+        errorMessage = errorText || 'Unknown error';
+      }
+      
+      throw new Error(`Spotify API error: ${errorMessage}`);
     }
     
-    return data;
+    return await response.json();
   } catch (error) {
     console.error(`Error in Spotify API request to ${endpoint}:`, error);
     throw error;
   }
 };
 
-// Get featured playlists - Modified to include fallback data
-export const getFeaturedPlaylists = async (limit = 10) => {
-  try {
-    const data = await apiRequest(`/browse/featured-playlists?limit=${limit}`);
-    
-    // If we have actual API data, use it
-    if (data.playlists?.items?.length > 0) {
-      return data.playlists.items.map(item => ({
-        id: item.id,
-        name: item.name,
-        description: item.description,
-        songs: item.tracks?.total || 0,
-        cover: item.images[0]?.url,
-        owner: item.owner.display_name,
-        isPublic: !item.public
-      }));
-    }
-    
-    // If API failed or returned empty, use fallback data
-    return [
-      {
-        id: 'fallback_playlist_1',
-        name: "Today's Hits",
-        description: 'The most popular songs right now',
-        songs: 50,
-        cover: 'https://placehold.co/300x300/8A2BE2/FFF?text=Popular',
-        owner: 'Spotify',
-        isPublic: true
-      },
-      {
-        id: 'fallback_playlist_2',
-        name: 'Chill Vibes',
-        description: 'Relaxing tunes to unwind',
-        songs: 45,
-        cover: 'https://placehold.co/300x300/4169E1/FFF?text=Chill',
-        owner: 'Spotify',
-        isPublic: true
-      },
-      {
-        id: 'fallback_playlist_3',
-        name: 'Workout Mix',
-        description: 'Energy boosting tracks for your exercise',
-        songs: 40,
-        cover: 'https://placehold.co/300x300/FF4500/FFF?text=Workout',
-        owner: 'Spotify',
-        isPublic: true
-      },
-      {
-        id: 'fallback_playlist_4',
-        name: 'Hip Hop Essentials',
-        description: 'Classic and current hip hop tracks',
-        songs: 55,
-        cover: 'https://placehold.co/300x300/FFD700/000?text=HipHop',
-        owner: 'Spotify',
-        isPublic: true
-      }
-    ].slice(0, limit);
-  } catch (error) {
-    console.error('Error getting featured playlists:', error);
-    // Return fallback data on error
-    return [
-      {
-        id: 'fallback_playlist_1',
-        name: "Today's Hits",
-        description: 'The most popular songs right now',
-        songs: 50,
-        cover: 'https://placehold.co/300x300/8A2BE2/FFF?text=Popular',
-        owner: 'Spotify',
-        isPublic: true
-      },
-      {
-        id: 'fallback_playlist_2',
-        name: 'Chill Vibes',
-        description: 'Relaxing tunes to unwind',
-        songs: 45,
-        cover: 'https://placehold.co/300x300/4169E1/FFF?text=Chill',
-        owner: 'Spotify',
-        isPublic: true
-      },
-      {
-        id: 'fallback_playlist_3',
-        name: 'Workout Mix',
-        description: 'Energy boosting tracks for your exercise',
-        songs: 40,
-        cover: 'https://placehold.co/300x300/FF4500/FFF?text=Workout',
-        owner: 'Spotify',
-        isPublic: true
-      },
-      {
-        id: 'fallback_playlist_4',
-        name: 'Hip Hop Essentials',
-        description: 'Classic and current hip hop tracks',
-        songs: 55,
-        cover: 'https://placehold.co/300x300/FFD700/000?text=HipHop',
-        owner: 'Spotify',
-        isPublic: true
-      }
-    ].slice(0, limit);
-  }
+// Get featured playlists
+export const getFeaturedPlaylists = async (limit = 4) => {
+  // Make sure to specify country and timestamp parameters
+  const timestamp = new Date().toISOString();
+  const data = await fetchWebApi(`/browse/featured-playlists?limit=${limit}&country=US&timestamp=${encodeURIComponent(timestamp)}`, 'GET');
+  
+  return data.playlists.items.map((item: any) => ({
+    id: item.id,
+    name: item.name,
+    description: item.description,
+    songs: item.tracks?.total || 0,
+    cover: item.images[0]?.url,
+    owner: item.owner.display_name,
+    isPublic: item.public !== false
+  }));
 };
 
-// Get playlist details including tracks - Modified with error handling
-export const getPlaylistDetails = async (playlistId) => {
+// Get playlist details including tracks
+export const getPlaylistDetails = async (playlistId: string) => {
+  const data = await fetchWebApi(`/playlists/${playlistId}?market=US`, 'GET');
+  
+  const tracks = data.tracks.items.map((item: any) => ({
+    id: item.track?.id || 'unknown',
+    title: item.track?.name || 'Unknown Track',
+    artist: item.track?.artists?.map((artist: any) => artist.name).join(', ') || 'Unknown Artist',
+    duration: item.track?.duration_ms ? msToMinSec(item.track.duration_ms) : '0:00',
+    cover: item.track?.album?.images[0]?.url || '',
+    uri: item.track?.uri || '',
+    previewUrl: item.track?.preview_url || null
+  }));
+  
+  return {
+    id: data.id,
+    name: data.name,
+    description: data.description,
+    coverImage: data.images[0]?.url,
+    songs: tracks,
+    owner: data.owner.display_name,
+    isPublic: data.public !== false,
+    createdAt: data.followers ? new Date().toISOString() : undefined
+  };
+};
+
+// Get user's top tracks (personalized)
+export const getPersonalTopTracks = async (limit = 5, timeRange = 'long_term') => {
+  const data = await fetchWebApi(`/me/top/tracks?time_range=${timeRange}&limit=${limit}`, 'GET', null, true);
+  
+  return data.items.map((item: any) => ({
+    id: item.id,
+    title: item.name,
+    artist: item.artists.map((artist: any) => artist.name).join(', '),
+    duration: msToMinSec(item.duration_ms),
+    cover: item.album.images[0]?.url,
+    uri: item.uri,
+    previewUrl: item.preview_url
+  }));
+};
+
+// Get user's personalized playlists
+export const getPersonalPlaylists = async (limit = 10) => {
+  const data = await fetchWebApi(`/me/playlists?limit=${limit}`, 'GET', null, true);
+  
+  return data.items.map((item: any) => ({
+    id: item.id,
+    name: item.name,
+    description: item.description,
+    songs: item.tracks?.total || 0,
+    cover: item.images[0]?.url,
+    owner: item.owner.display_name,
+    isPublic: item.public !== false
+  }));
+};
+
+// Create a new playlist with tracks
+export const createPlaylist = async (name: string, description: string, trackUris: string[]) => {
   try {
-    // If it's a fallback playlist ID, return mock data
-    if (playlistId.startsWith('fallback_playlist_')) {
-      return generateFallbackPlaylistDetails(playlistId);
+    // Get user profile first
+    const userProfile = await fetchWebApi('/me', 'GET', null, true);
+    const userId = userProfile.id;
+    
+    // Create the playlist
+    const playlist = await fetchWebApi(
+      `/users/${userId}/playlists`, 
+      'POST', 
+      {
+        name,
+        description,
+        public: false
+      },
+      true
+    );
+    
+    // Add tracks to the playlist
+    if (trackUris.length > 0) {
+      await fetchWebApi(
+        `/playlists/${playlist.id}/tracks`,
+        'POST',
+        { uris: trackUris },
+        true
+      );
     }
-    
-    const data = await apiRequest(`/playlists/${playlistId}`);
-    
-    const tracks = data.tracks?.items?.map(item => ({
-      id: item.track?.id || `track_${Math.random().toString(36).substr(2, 9)}`,
-      title: item.track?.name || 'Unknown Track',
-      artist: item.track?.artists?.map(artist => artist.name).join(', ') || 'Unknown Artist',
-      duration: item.track?.duration_ms ? msToMinSec(item.track.duration_ms) : '0:00',
-      cover: item.track?.album?.images?.[0]?.url || 'https://placehold.co/300x300/8A2BE2/FFF?text=Track',
-      uri: item.track?.uri || '',
-      previewUrl: item.track?.preview_url || ''
-    })) || [];
     
     return {
-      id: data.id || playlistId,
-      name: data.name || 'Playlist',
-      description: data.description || '',
-      coverImage: data.images?.[0]?.url || 'https://placehold.co/300x300/8A2BE2/FFF?text=Playlist',
-      songs: tracks,
-      owner: data.owner?.display_name || 'Unknown',
-      isPublic: data.public !== undefined ? !data.public : true,
-      createdAt: data.followers ? new Date().toISOString() : undefined
+      id: playlist.id,
+      name: playlist.name,
+      description: playlist.description,
+      externalUrl: playlist.external_urls?.spotify
     };
   } catch (error) {
-    console.error(`Error fetching playlist details for ${playlistId}:`, error);
-    return generateFallbackPlaylistDetails(playlistId);
+    console.error('Error creating playlist:', error);
+    throw error;
   }
 };
 
-// Get recently played tracks from local storage
+// Get new releases (instead of top artists since that requires user authorization)
+export const getTopArtists = async (limit = 10) => {
+  const data = await fetchWebApi(`/browse/new-releases?limit=${limit}&country=US`, 'GET');
+  
+  // Extract unique artists from new releases
+  const artistsMap = new Map();
+  
+  data.albums.items.forEach((album: any) => {
+    const artist = album.artists[0];
+    if (artist && !artistsMap.has(artist.id)) {
+      artistsMap.set(artist.id, {
+        id: artist.id,
+        name: artist.name,
+        genre: album.genres?.[0] || 'Unknown',
+        image: album.images[0]?.url
+      });
+    }
+  });
+  
+  return Array.from(artistsMap.values()).slice(0, limit);
+};
+
+// Get user's personalized top artists
+export const getPersonalTopArtists = async (limit = 5, timeRange = 'long_term') => {
+  const data = await fetchWebApi(`/me/top/artists?time_range=${timeRange}&limit=${limit}`, 'GET', null, true);
+  
+  return data.items.map((item: any) => ({
+    id: item.id,
+    name: item.name,
+    genres: item.genres || [],
+    popularity: item.popularity,
+    image: item.images[0]?.url
+  }));
+};
+
+// Get recommendations based on user's top tracks and artists
+export const getPersonalRecommendations = async (limit = 10) => {
+  // Get user's top tracks and artists
+  const topTracks = await getPersonalTopTracks(3);
+  const topArtists = await getPersonalTopArtists(2);
+  
+  const seedTracks = topTracks.map(track => track.id).slice(0, 2);
+  const seedArtists = topArtists.map(artist => artist.id).slice(0, 3);
+  
+  // Get recommendations
+  const data = await fetchWebApi(
+    `/recommendations?limit=${limit}&seed_tracks=${seedTracks.join(',')}&seed_artists=${seedArtists.join(',')}`,
+    'GET',
+    null,
+    true
+  );
+  
+  return data.tracks.map((item: any) => ({
+    id: item.id,
+    title: item.name,
+    artist: item.artists.map((artist: any) => artist.name).join(', '),
+    duration: msToMinSec(item.duration_ms),
+    cover: item.album.images[0]?.url,
+    uri: item.uri,
+    previewUrl: item.preview_url
+  }));
+};
+
+// Search for tracks
+export const searchTracks = async (query: string, limit = 20) => {
+  if (!query || query.trim().length === 0) {
+    return [];
+  }
+  
+  const data = await fetchWebApi(`/search?q=${encodeURIComponent(query)}&type=track&limit=${limit}&market=US`, 'GET');
+  
+  return data.tracks.items.map((item: any) => ({
+    id: item.id,
+    title: item.name,
+    artist: item.artists.map((artist: any) => artist.name).join(', '),
+    duration: msToMinSec(item.duration_ms),
+    cover: item.album.images[0]?.url,
+    uri: item.uri,
+    previewUrl: item.preview_url
+  }));
+};
+
+// Get recently played tracks from API (personalized)
+export const getRecentlyPlayedTracks = async (limit = 20) => {
+  const data = await fetchWebApi(`/me/player/recently-played?limit=${limit}`, 'GET', null, true);
+  
+  return data.items.map((item: any) => ({
+    id: item.track.id,
+    title: item.track.name,
+    artist: item.track.artists.map((artist: any) => artist.name).join(', '),
+    duration: msToMinSec(item.track.duration_ms),
+    cover: item.track.album.images[0]?.url,
+    uri: item.track.uri,
+    previewUrl: item.track.preview_url,
+    playedAt: item.played_at
+  }));
+};
+
+// Get recently played tracks from local storage (fallback)
 export const getRecentSongs = async () => {
   try {
     const recentSongsString = await AsyncStorage.getItem('recentSongs');
@@ -237,472 +324,37 @@ export const getRecentSongs = async () => {
   }
 };
 
-// Helper function to generate fallback playlist details
-const generateFallbackPlaylistDetails = (playlistId) => {
-  let name, description, coverImage, songs;
-  
-  switch(playlistId) {
-    case 'fallback_playlist_1':
-      name = "Today's Hits";
-      description = 'The most popular songs right now';
-      coverImage = 'https://placehold.co/300x300/8A2BE2/FFF?text=Popular';
-      songs = generateMockSongs(10, 'Pop');
-      break;
-    case 'fallback_playlist_2':
-      name = 'Chill Vibes';
-      description = 'Relaxing tunes to unwind';
-      coverImage = 'https://placehold.co/300x300/4169E1/FFF?text=Chill';
-      songs = generateMockSongs(8, 'Chill');
-      break;
-    case 'fallback_playlist_3':
-      name = 'Workout Mix';
-      description = 'Energy boosting tracks for your exercise';
-      coverImage = 'https://placehold.co/300x300/FF4500/FFF?text=Workout';
-      songs = generateMockSongs(12, 'EDM');
-      break;
-    case 'fallback_playlist_4':
-      name = 'Hip Hop Essentials';
-      description = 'Classic and current hip hop tracks';
-      coverImage = 'https://placehold.co/300x300/FFD700/000?text=HipHop';
-      songs = generateMockSongs(15, 'Hip Hop');
-      break;
-    default:
-      name = 'Playlist';
-      description = 'Playlist description';
-      coverImage = 'https://placehold.co/300x300/8A2BE2/FFF?text=Playlist';
-      songs = generateMockSongs(5, 'Mixed');
-  }
-  
-  return {
-    id: playlistId,
-    name,
-    description,
-    coverImage,
-    songs,
-    owner: 'Spotify',
-    isPublic: true,
-    createdAt: new Date().toISOString()
-  };
-};
-
-// Helper function to generate mock songs
-const generateMockSongs = (count, genre) => {
-  const genres = {
-    'Pop': {
-      artists: ['Taylor Swift', 'Ed Sheeran', 'Ariana Grande', 'Justin Bieber', 'Billie Eilish'],
-      titles: ['Summer Nights', 'Dancing in the Dark', 'Perfect Day', 'Midnight Sky', 'Golden Hour']
-    },
-    'Rock': {
-      artists: ['Foo Fighters', 'Arctic Monkeys', 'The Killers', 'Imagine Dragons', 'Twenty One Pilots'],
-      titles: ['High Voltage', 'Stone Cold', 'Burning Bridges', 'Rising Star', 'Heavy Crown']
-    },
-    'Hip Hop': {
-      artists: ['Drake', 'Kendrick Lamar', 'J. Cole', 'Travis Scott', 'Cardi B'],
-      titles: ['City Lights', 'Street Dreams', 'Money Moves', 'Real Talk', 'Fresh Prince']
-    },
-    'EDM': {
-      artists: ['Calvin Harris', 'Marshmello', 'Avicii', 'David Guetta', 'Martin Garrix'],
-      titles: ['Electric Soul', 'Bass Drop', 'Neon Nights', 'Club Paradise', 'Synthetic Heart']
-    },
-    'Chill': {
-      artists: ['Bon Iver', 'Frank Ocean', 'Lana Del Rey', 'Tame Impala', 'Mac DeMarco'],
-      titles: ['Ocean Breeze', 'Sunset Dreams', 'Mountain View', 'Calm Waters', 'Silent Echo']
-    },
-    'Mixed': {
-      artists: ['Various Artists', 'Unknown Artist', 'The Band', 'Studio Musicians', 'DJ Mix'],
-      titles: ['Untitled Track', 'New Song', 'Amazing Tune', 'Great Music', 'Cool Vibes']
-    }
-  };
-
-  const genreData = genres[genre] || genres['Mixed'];
-  
-  return Array.from({ length: count }, (_, i) => {
-    const artistIndex = Math.floor(Math.random() * genreData.artists.length);
-    const titleIndex = Math.floor(Math.random() * genreData.titles.length);
-    
-    return {
-      id: `mock_song_${i}`,
-      title: `${genreData.titles[titleIndex]} ${i + 1}`,
-      artist: genreData.artists[artistIndex],
-      duration: `${Math.floor(Math.random() * 4) + 2}:${String(Math.floor(Math.random() * 60)).padStart(2, '0')}`,
-      cover: `https://placehold.co/300x300/${getRandomColor()}/FFF?text=${genre}`,
-      uri: `spotify:track:mock_${i}`,
-      previewUrl: ''
-    };
-  });
-};
-
-// Get random color for placeholder images
-const getRandomColor = () => {
-  const colors = ['8A2BE2', '4169E1', 'FF4500', 'FFD700', '32CD32', 'FF1493', '00CED1', 'FFA500'];
-  return colors[Math.floor(Math.random() * colors.length)];
-};
-
-// Helper function to convert milliseconds to mm:ss format
-const msToMinSec = (ms) => {
-  const totalSeconds = Math.floor(ms / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-};
-
-// Get top artists - Completed with error handling
-export const getTopArtists = async (limit = 10) => {
+// Save track to recent songs
+export const saveToRecentSongs = async (song: any) => {
   try {
-    const data = await apiRequest(`/browse/new-releases?limit=${limit}`);
+    const recentSongs = await getRecentSongs();
     
-    // Extract unique artists from new releases
-    const artistsMap = new Map();
+    // Remove the song if it already exists
+    const filteredSongs = recentSongs.filter((s: any) => s.id !== song.id);
     
-    if (data.albums?.items?.length > 0) {
-      data.albums.items.forEach(album => {
-        const artist = album.artists?.[0];
-        if (artist && !artistsMap.has(artist.id)) {
-          artistsMap.set(artist.id, {
-            id: artist.id,
-            name: artist.name,
-            genre: album.genres?.[0] || 'Unknown',
-            image: album.images?.[0]?.url
-          });
-        }
-      });
-      
-      const artists = Array.from(artistsMap.values());
-      if (artists.length > 0) {
-        return artists.slice(0, limit);
-      }
-    }
+    // Add the song to the beginning
+    const updatedSongs = [song, ...filteredSongs].slice(0, 20);
     
-    // Return fallback data if API returns no results
-    return generateFallbackArtists(limit);
+    await AsyncStorage.setItem('recentSongs', JSON.stringify(updatedSongs));
+    
+    return updatedSongs;
   } catch (error) {
-    console.error('Error getting top artists:', error);
-    return generateFallbackArtists(limit);
+    console.error('Error saving to recent songs:', error);
+    throw error;
   }
 };
 
-// Helper function to generate fallback artists
-const generateFallbackArtists = (limit = 10) => {
-  const fallbackArtists = [
-    {
-      id: 'fallback_artist_1',
-      name: 'The Weeknd',
-      genre: 'R&B/Pop',
-      image: `https://placehold.co/300x300/${getRandomColor()}/FFF?text=TheWeeknd`
-    },
-    {
-      id: 'fallback_artist_2',
-      name: 'Taylor Swift',
-      genre: 'Pop',
-      image: `https://placehold.co/300x300/${getRandomColor()}/FFF?text=TaylorSwift`
-    },
-    {
-      id: 'fallback_artist_3',
-      name: 'Drake',
-      genre: 'Hip Hop',
-      image: `https://placehold.co/300x300/${getRandomColor()}/FFF?text=Drake`
-    },
-    {
-      id: 'fallback_artist_4',
-      name: 'Billie Eilish',
-      genre: 'Pop',
-      image: `https://placehold.co/300x300/${getRandomColor()}/FFF?text=BillieEilish`
-    },
-    {
-      id: 'fallback_artist_5',
-      name: 'Bad Bunny',
-      genre: 'Reggaeton',
-      image: `https://placehold.co/300x300/${getRandomColor()}/FFF?text=BadBunny`
-    },
-    {
-      id: 'fallback_artist_6',
-      name: 'Dua Lipa',
-      genre: 'Pop',
-      image: `https://placehold.co/300x300/${getRandomColor()}/FFF?text=DuaLipa`
-    },
-    {
-      id: 'fallback_artist_7',
-      name: 'Kendrick Lamar',
-      genre: 'Hip Hop',
-      image: `https://placehold.co/300x300/${getRandomColor()}/FFF?text=KendrickLamar`
-    },
-    {
-      id: 'fallback_artist_8',
-      name: 'Adele',
-      genre: 'Pop/Soul',
-      image: `https://placehold.co/300x300/${getRandomColor()}/FFF?text=Adele`
-    },
-    {
-      id: 'fallback_artist_9',
-      name: 'Harry Styles',
-      genre: 'Pop/Rock',
-      image: `https://placehold.co/300x300/${getRandomColor()}/FFF?text=HarryStyles`
-    },
-    {
-      id: 'fallback_artist_10',
-      name: 'BTS',
-      genre: 'K-Pop',
-      image: `https://placehold.co/300x300/${getRandomColor()}/FFF?text=BTS`
-    }
-  ];
-  
-  return fallbackArtists.slice(0, limit);
+// Helper to format milliseconds to MM:SS
+const msToMinSec = (ms: number): string => {
+  const minutes = Math.floor(ms / 60000);
+  const seconds = Math.floor((ms % 60000) / 1000);
+  return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
 };
 
-// Search for tracks, artists, albums or playlists
-export const searchSpotify = async (query, type = 'track,artist,album,playlist', limit = 20) => {
-  if (!query || query.trim() === '') {
-    return {
-      tracks: [],
-      artists: [],
-      albums: [],
-      playlists: []
-    };
-  }
-  
-  try {
-    const encodedQuery = encodeURIComponent(query);
-    const data = await apiRequest(`/search?q=${encodedQuery}&type=${type}&limit=${limit}`);
-    
-    const results = {
-      tracks: (data.tracks?.items || []).map(track => ({
-        id: track.id,
-        title: track.name,
-        artist: track.artists.map(artist => artist.name).join(', '),
-        album: track.album?.name,
-        duration: msToMinSec(track.duration_ms),
-        cover: track.album?.images[0]?.url,
-        uri: track.uri,
-        previewUrl: track.preview_url
-      })),
-      
-      artists: (data.artists?.items || []).map(artist => ({
-        id: artist.id,
-        name: artist.name,
-        genre: artist.genres?.[0] || 'Unknown',
-        image: artist.images?.[0]?.url,
-        popularity: artist.popularity,
-        uri: artist.uri
-      })),
-      
-      albums: (data.albums?.items || []).map(album => ({
-        id: album.id,
-        name: album.name,
-        artist: album.artists.map(artist => artist.name).join(', '),
-        cover: album.images?.[0]?.url,
-        releaseDate: album.release_date,
-        totalTracks: album.total_tracks,
-        uri: album.uri
-      })),
-      
-      playlists: (data.playlists?.items || []).map(playlist => ({
-        id: playlist.id,
-        name: playlist.name,
-        description: playlist.description,
-        owner: playlist.owner?.display_name,
-        cover: playlist.images?.[0]?.url,
-        tracks: playlist.tracks?.total || 0,
-        uri: playlist.uri
-      }))
-    };
-    
-    return results;
-  } catch (error) {
-    console.error('Error searching Spotify:', error);
-    // Return empty results on error
-    return {
-      tracks: [],
-      artists: [],
-      albums: [],
-      playlists: []
-    };
-  }
-};
-
-// Get artist details including top tracks
-export const getArtistDetails = async (artistId) => {
-  try {
-    // If it's a fallback artist ID, return mock data
-    if (artistId.startsWith('fallback_artist_')) {
-      return generateFallbackArtistDetails(artistId);
-    }
-    
-    // Make parallel requests for artist info and top tracks
-    const [artistData, topTracksData, albumsData] = await Promise.all([
-      apiRequest(`/artists/${artistId}`),
-      apiRequest(`/artists/${artistId}/top-tracks?market=US`),
-      apiRequest(`/artists/${artistId}/albums?limit=10&include_groups=album,single`)
-    ]);
-    
-    // Process top tracks
-    const topTracks = topTracksData.tracks?.map(track => ({
-      id: track.id,
-      title: track.name,
-      album: track.album?.name,
-      duration: msToMinSec(track.duration_ms),
-      cover: track.album?.images?.[0]?.url,
-      popularity: track.popularity,
-      previewUrl: track.preview_url,
-      uri: track.uri
-    })) || [];
-    
-    // Process albums
-    const albums = albumsData.items?.map(album => ({
-      id: album.id,
-      name: album.name,
-      releaseDate: album.release_date,
-      totalTracks: album.total_tracks,
-      cover: album.images?.[0]?.url,
-      uri: album.uri
-    })) || [];
-    
-    return {
-      id: artistData.id,
-      name: artistData.name,
-      genres: artistData.genres || [],
-      popularity: artistData.popularity,
-      followers: artistData.followers?.total,
-      image: artistData.images?.[0]?.url,
-      topTracks,
-      albums
-    };
-  } catch (error) {
-    console.error(`Error fetching artist details for ${artistId}:`, error);
-    return generateFallbackArtistDetails(artistId);
-  }
-};
-
-// Helper function to generate fallback artist details
-const generateFallbackArtistDetails = (artistId) => {
-  let name, genre, image;
-  
-  // Extract artist number from ID
-  const artistNum = parseInt(artistId.split('_')[2]) || 1;
-  const fallbackArtists = generateFallbackArtists(10);
-  const artistIndex = (artistNum - 1) % fallbackArtists.length;
-  
-  // Get basic info from fallback artists list
-  const artistInfo = fallbackArtists[artistIndex];
-  name = artistInfo.name;
-  genre = artistInfo.genre;
-  image = artistInfo.image;
-  
-  // Generate mock top tracks
-  const tracks = generateMockSongs(10, genre.split('/')[0]);
-  const topTracks = tracks.map(track => ({
-    id: track.id,
-    title: track.title,
-    album: `${name} - Greatest Hits`,
-    duration: track.duration,
-    cover: track.cover,
-    popularity: Math.floor(Math.random() * 100),
-    previewUrl: '',
-    uri: track.uri
-  }));
-  
-  // Generate mock albums
-  const albums = Array.from({ length: 5 }, (_, i) => {
-    const year = 2023 - i;
-    return {
-      id: `album_${artistId}_${i}`,
-      name: i === 0 ? 'Latest Release' : `${name} Album ${i}`,
-      releaseDate: `${year}-05-${Math.floor(Math.random() * 28) + 1}`,
-      totalTracks: Math.floor(Math.random() * 12) + 8,
-      cover: `https://placehold.co/300x300/${getRandomColor()}/FFF?text=Album${i}`,
-      uri: `spotify:album:mock_${artistId}_${i}`
-    };
-  });
-  
-  return {
-    id: artistId,
-    name,
-    genres: genre.includes('/') ? genre.split('/') : [genre],
-    popularity: Math.floor(Math.random() * 100),
-    followers: Math.floor(Math.random() * 10000000) + 1000000,
-    image,
-    topTracks,
-    albums
-  };
-};
-
-// Get album details
-export const getAlbumDetails = async (albumId) => {
-  try {
-    const data = await apiRequest(`/albums/${albumId}`);
-    
-    const tracks = data.tracks?.items?.map(track => ({
-      id: track.id,
-      title: track.name,
-      artist: track.artists?.map(artist => artist.name).join(', '),
-      duration: msToMinSec(track.duration_ms),
-      trackNumber: track.track_number,
-      uri: track.uri,
-      previewUrl: track.preview_url
-    })) || [];
-    
-    return {
-      id: data.id,
-      name: data.name,
-      artist: data.artists?.map(artist => artist.name).join(', '),
-      artistId: data.artists?.[0]?.id,
-      releaseDate: data.release_date,
-      totalTracks: data.total_tracks,
-      popularity: data.popularity,
-      cover: data.images?.[0]?.url,
-      genres: data.genres || [],
-      tracks,
-      uri: data.uri
-    };
-  } catch (error) {
-    console.error(`Error fetching album details for ${albumId}:`, error);
-    return generateFallbackAlbumDetails(albumId);
-  }
-};
-
-// Helper function to generate fallback album details
-const generateFallbackAlbumDetails = (albumId) => {
-  // Extract artist info from album ID if possible
-  const parts = albumId.split('_');
-  let artistId = 'fallback_artist_1';
-  
-  if (parts.length >= 3 && parts[1].startsWith('fallback_artist')) {
-    artistId = `${parts[1]}_${parts[2]}`;
-  }
-  
-  // Get mock artist details
-  const artistDetails = generateFallbackArtistDetails(artistId);
-  
-  // Generate tracks
-  const trackCount = 10;
-  const genre = artistDetails.genres?.[0] || 'Pop';
-  const tracks = generateMockSongs(trackCount, genre).map((song, index) => ({
-    ...song,
-    artist: artistDetails.name,
-    trackNumber: index + 1
-  }));
-  
-  return {
-    id: albumId,
-    name: `${artistDetails.name} - Album`,
-    artist: artistDetails.name,
-    artistId: artistId,
-    releaseDate: `${2020 + Math.floor(Math.random() * 5)}-${String(Math.floor(Math.random() * 12) + 1).padStart(2, '0')}-01`,
-    totalTracks: trackCount,
-    popularity: Math.floor(Math.random() * 100),
-    cover: `https://placehold.co/300x300/${getRandomColor()}/FFF?text=Album`,
-    genres: artistDetails.genres,
-    tracks,
-    uri: `spotify:album:${albumId}`
-  };
-};
-
-// Export all necessary functions
 export default {
   getFeaturedPlaylists,
   getPlaylistDetails,
-  getRecentSongs,
   getTopArtists,
-  searchSpotify,
-  getArtistDetails,
-  getAlbumDetails
+  searchTracks,
+  getRecentSongs
 };
