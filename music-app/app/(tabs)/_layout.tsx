@@ -17,21 +17,28 @@ export default function TabLayout() {
       }}
     >
       <Tabs.Screen
-        name="index" // This screen serves as Home
+        name="home" // This screen serves as Home
         options={{
           title: 'Home',
           tabBarIcon: ({ color }) => <Ionicons name="home" size={24} color={color} />
         }}
       />
       <Tabs.Screen
-        name="nowPlaying"
+        name="Search" // Adding search screen to tabs
+        options={{
+          title: 'Search',
+          tabBarIcon: ({ color }) => <Ionicons name="search" size={24} color={color} />
+        }}
+      />
+      <Tabs.Screen
+        name="NowPlaying"
         options={{
           title: 'Now Playing',
           tabBarIcon: ({ color }) => <Ionicons name="musical-notes" size={24} color={color} />
         }}
       />
       <Tabs.Screen
-        name="library"
+        name="LibraryScreen"
         options={{
           title: 'Library',
           tabBarIcon: ({ color }) => <Ionicons name="library" size={24} color={color} />

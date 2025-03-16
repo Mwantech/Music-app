@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { 
   View, 
   Text, 
@@ -6,7 +6,8 @@ import {
   Image, 
   Alert,
   ActivityIndicator,
-  StyleSheet
+  StyleSheet,
+  SafeAreaView
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,10 +22,25 @@ export default function NowPlayingScreen() {
   const [duration, setDuration] = useState(0);
   const [position, setPosition] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasCheckedSong, setHasCheckedSong] = useState(false);
+  
+  // Keep track of component mounted state
+  const isMounted = useRef(true);
   
   // Get the music context and router
   const { currentSong, setCurrentSong } = useMusic();
   const router = useRouter();
+
+  // First check if we have a song, before trying to do anything else
+  useEffect(() => {
+    if (!currentSong) {
+      Alert.alert('No Song', 'No song is currently selected.', [
+        { text: 'OK', onPress: () => router.back() }
+      ]);
+    } else {
+      setHasCheckedSong(true);
+    }
+  }, [currentSong, router]);
 
   useEffect(() => {
     // Initialize audio settings
@@ -45,16 +61,17 @@ export default function NowPlayingScreen() {
     };
     
     setupAudio();
+    
+    // Set cleanup function
+    return () => {
+      isMounted.current = false;
+    };
   }, []);
 
+  // Only proceed with loading audio if we confirmed we have a song
   useEffect(() => {
-    // Load and play the current song
-    if (currentSong) {
+    if (hasCheckedSong && currentSong) {
       loadAudio();
-    } else {
-      // If no current song, show a message and go back
-      Alert.alert('No Song', 'No song is currently selected.');
-      router.back();
     }
 
     // Cleanup when component unmounts
@@ -63,14 +80,14 @@ export default function NowPlayingScreen() {
         sound.unloadAsync();
       }
     };
-  }, [currentSong]);
+  }, [hasCheckedSong, currentSong]);
 
   useEffect(() => {
     // Update position every second when playing
     let interval;
     if (isPlaying) {
       interval = setInterval(async () => {
-        if (sound) {
+        if (sound && isMounted.current) {
           try {
             const status = await sound.getStatusAsync();
             if (status.isLoaded) {
@@ -106,7 +123,7 @@ export default function NowPlayingScreen() {
       if (currentSong.sound) {
         setSound(currentSong.sound);
         const status = await currentSong.sound.getStatusAsync();
-        if (status.isLoaded) {
+        if (status.isLoaded && isMounted.current) {
           setDuration(status.durationMillis || 0);
           setPosition(status.positionMillis || 0);
           
@@ -121,23 +138,35 @@ export default function NowPlayingScreen() {
           { shouldPlay: true },
           onPlaybackStatusUpdate
         );
-        setSound(newSound);
         
-        // Update the currentSong in context with the sound object
-        if (setCurrentSong) {
-          setCurrentSong({ ...currentSong, sound: newSound });
+        if (isMounted.current) {
+          setSound(newSound);
+          
+          // Update the currentSong in context with the sound object
+          if (setCurrentSong) {
+            setCurrentSong({ ...currentSong, sound: newSound });
+          }
+          setIsPlaying(true);
+        } else {
+          // Clean up if component unmounted during async operation
+          newSound.unloadAsync();
         }
-        setIsPlaying(true);
       }
     } catch (error) {
       console.error('Error loading audio:', error);
-      Alert.alert('Error', 'Could not play this song');
+      if (isMounted.current) {
+        Alert.alert('Error', 'Could not play this song');
+      }
     } finally {
-      setIsLoading(false);
+      if (isMounted.current) {
+        setIsLoading(false);
+      }
     }
   };
 
   const onPlaybackStatusUpdate = (status) => {
+    if (!isMounted.current) return;
+    
     if (status.isLoaded) {
       setDuration(status.durationMillis || 0);
       setPosition(status.positionMillis || 0);
@@ -154,15 +183,21 @@ export default function NowPlayingScreen() {
       if (isPlaying) {
         console.log('Pausing audio...');
         await sound.pauseAsync();
-        setIsPlaying(false);  // Make sure we update the state after pausing
+        if (isMounted.current) {
+          setIsPlaying(false);
+        }
       } else {
         console.log('Playing audio...');
         await sound.playAsync();
-        setIsPlaying(true);   // Make sure we update the state after playing
+        if (isMounted.current) {
+          setIsPlaying(true);
+        }
       }
     } catch (error) {
       console.error('Error toggling playback:', error);
-      Alert.alert('Playback Error', 'Failed to toggle playback state');
+      if (isMounted.current) {
+        Alert.alert('Playback Error', 'Failed to toggle playback state');
+      }
     }
   };
 
@@ -173,10 +208,14 @@ export default function NowPlayingScreen() {
       // Skip forward 10 seconds
       const newPosition = Math.min(position + 10000, duration);
       await sound.setPositionAsync(newPosition);
-      setPosition(newPosition);
+      if (isMounted.current) {
+        setPosition(newPosition);
+      }
     } catch (error) {
       console.error('Error skipping forward:', error);
-      Alert.alert('Feature', 'Skip to next song feature coming soon!');
+      if (isMounted.current) {
+        Alert.alert('Feature', 'Skip to next song feature coming soon!');
+      }
     }
   };
 
@@ -187,10 +226,14 @@ export default function NowPlayingScreen() {
       // Skip backward 10 seconds
       const newPosition = Math.max(position - 10000, 0);
       await sound.setPositionAsync(newPosition);
-      setPosition(newPosition);
+      if (isMounted.current) {
+        setPosition(newPosition);
+      }
     } catch (error) {
       console.error('Error skipping backward:', error);
-      Alert.alert('Feature', 'Skip to previous song feature coming soon!');
+      if (isMounted.current) {
+        Alert.alert('Feature', 'Skip to previous song feature coming soon!');
+      }
     }
   };
 
@@ -199,7 +242,9 @@ export default function NowPlayingScreen() {
     
     try {
       await sound.setPositionAsync(value);
-      setPosition(value);
+      if (isMounted.current) {
+        setPosition(value);
+      }
     } catch (error) {
       console.error('Error setting position:', error);
     }
@@ -217,6 +262,21 @@ export default function NowPlayingScreen() {
 
   const isPlayingOrPaused = sound !== null && !isLoading;
 
+  // If we don't have a song and haven't checked yet, render a loading screen
+  if (!hasCheckedSong) {
+    return (
+      <SafeAreaView style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#8A2BE2" />
+        <Text style={styles.loadingText}>Loading...</Text>
+      </SafeAreaView>
+    );
+  }
+
+  // If we don't have a song but have checked, the alert will handle navigation
+  if (!currentSong) {
+    return null;
+  }
+
   return (
     <View style={styles.nowPlayingContainer}>
       <LinearGradient
@@ -233,10 +293,18 @@ export default function NowPlayingScreen() {
       </LinearGradient>
 
       <View style={styles.albumArtContainer}>
-        <Image 
-          source={currentSong?.cover || require('../../assets/images/burnaboy.jpeg')} 
-          style={styles.albumArt} 
-        />
+        {currentSong?.cover ? (
+          <Image 
+            source={currentSong.cover} 
+            style={styles.albumArt}
+            defaultSource={require('../../assets/images/burnaboy.jpeg')} 
+          />
+        ) : (
+          <Image 
+            source={require('../../assets/images/burnaboy.jpeg')} 
+            style={styles.albumArt} 
+          />
+        )}
       </View>
 
       <View style={styles.songInfoContainer}>
@@ -248,7 +316,7 @@ export default function NowPlayingScreen() {
         <Slider
           style={styles.progressBar}
           minimumValue={0}
-          maximumValue={duration}
+          maximumValue={duration > 0 ? duration : 1}
           value={position}
           onSlidingComplete={handleSliderChange}
           minimumTrackTintColor="#8A2BE2"
@@ -324,58 +392,57 @@ export default function NowPlayingScreen() {
   );
 }
 
+// StyleSheet needs to be included for the component to work
 const styles = StyleSheet.create({
   nowPlayingContainer: {
     flex: 1,
-    backgroundColor: '#FFF',
+    backgroundColor: '#FFFFFF',
   },
   nowPlayingHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingTop: 50,
-    paddingBottom: 15,
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
+    paddingTop: 48,
+    paddingBottom: 16,
   },
   nowPlayingHeaderTitle: {
-    fontSize: 18,
+    color: '#FFFFFF',
+    fontSize: 16,
     fontWeight: '600',
-    color: '#FFF',
   },
   albumArtContainer: {
     alignItems: 'center',
-    paddingVertical: 30,
+    justifyContent: 'center',
+    marginTop: 24,
+    marginBottom: 24,
+    height: 300,
   },
   albumArt: {
-    width: 280,
-    height: 280,
+    width: 300,
+    height: 300,
     borderRadius: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-    elevation: 8,
   },
   songInfoContainer: {
     alignItems: 'center',
+    marginBottom: 24,
     paddingHorizontal: 20,
-    marginBottom: 30,
   },
   nowPlayingSongTitle: {
     fontSize: 24,
-    fontWeight: '700',
+    fontWeight: 'bold',
     color: '#333',
-    textAlign: 'center',
     marginBottom: 8,
+    textAlign: 'center',
   },
   nowPlayingSongArtist: {
-    fontSize: 18,
+    fontSize: 16,
     color: '#666',
     textAlign: 'center',
   },
   progressContainer: {
-    paddingHorizontal: 20,
-    marginBottom: 20,
+    paddingHorizontal: 24,
+    marginBottom: 24,
   },
   progressBar: {
     width: '100%',
@@ -384,42 +451,36 @@ const styles = StyleSheet.create({
   timeContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: 5,
+    marginTop: -8,
   },
   timeText: {
-    fontSize: 14,
     color: '#666',
+    fontSize: 12,
   },
   controlsContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 40,
-    marginBottom: 20,
+    marginBottom: 24,
   },
   controlButton: {
-    padding: 10,
+    padding: 16,
   },
   playPauseButton: {
+    backgroundColor: '#8A2BE2',
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#8A2BE2',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
-    elevation: 5,
+    marginHorizontal: 32,
   },
   additionalControlsContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingHorizontal: 40,
-    paddingVertical: 20,
+    justifyContent: 'space-evenly',
+    paddingHorizontal: 32,
   },
   additionalControlButton: {
-    padding: 10,
+    padding: 16,
   },
 });

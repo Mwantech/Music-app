@@ -9,16 +9,37 @@ import {
   Alert,
   Modal,
   Platform,
-  PermissionsAndroid
+  ActivityIndicator
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, FontAwesome5, MaterialIcons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 
 import AddPlaylistForm from '../components/AddPlaylistForm';
 import PlaylistView from '../components/PlaylistView';
+import spotify from '../spotify_service/spotify';
+import { useMusic } from '../context/musicContext';
 
-export default function HomeScreen({ navigation, setCurrentSong, currentSong }) {
+// Safe image source utility function
+const safeImageSource = (source, fallbackImage) => {
+  // If source is falsy, return fallback
+  if (!source) return fallbackImage;
+  
+  // If source is a string, return as uri
+  if (typeof source === 'string') return { uri: source };
+  
+  // If source is a number (required image), return directly
+  if (typeof source === 'number') return source;
+  
+  // For any other type, return fallback
+  return fallbackImage;
+};
+
+export default function HomeScreen() {
+  const { currentSong, setCurrentSong } = useMusic();
+  const defaultImage = require('../../assets/images/burnaboy.jpeg');
+  
   const [userData, setUserData] = useState(null);
   const [recentSongs, setRecentSongs] = useState([]);
   const [playlists, setPlaylists] = useState([]);
@@ -27,46 +48,115 @@ export default function HomeScreen({ navigation, setCurrentSong, currentSong }) 
   const [currentPlaylist, setCurrentPlaylist] = useState(null);
   const [featuredPlaylists, setFeaturedPlaylists] = useState([]);
   const [topArtists, setTopArtists] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [sectionErrors, setSectionErrors] = useState({
+    featuredPlaylists: false,
+    topArtists: false,
+    recentSongs: false,
+    playlists: false
+  });
+
+  // Load user data and local storage items
+  const loadLocalData = async () => {
+    try {
+      // Load user data from local storage
+      const userDataString = await AsyncStorage.getItem('userData');
+      if (userDataString) {
+        setUserData(JSON.parse(userDataString));
+      }
+      
+      // Load recent songs from local storage
+      const recentSongsData = await spotify.getRecentSongs();
+      // Ensure all image URIs are strings
+      const sanitizedRecentSongs = recentSongsData.map(song => ({
+        ...song,
+        cover: typeof song.cover === 'string' ? song.cover : null
+      }));
+      setRecentSongs(sanitizedRecentSongs);
+      
+      // Load user playlists from local storage
+      const playlistsString = await AsyncStorage.getItem('playlists');
+      if (playlistsString) {
+        const parsedPlaylists = JSON.parse(playlistsString);
+        // Ensure all coverImage URIs are strings
+        const sanitizedPlaylists = parsedPlaylists.map(playlist => ({
+          ...playlist,
+          coverImage: typeof playlist.coverImage === 'string' ? playlist.coverImage : null
+        }));
+        setPlaylists(sanitizedPlaylists);
+      }
+    } catch (error) {
+      console.error('Error loading local data:', error);
+      setSectionErrors(prev => ({
+        ...prev,
+        recentSongs: true,
+        playlists: true
+      }));
+    }
+  };
+
+  // Load featured playlists separately
+  const loadFeaturedPlaylists = async () => {
+    try {
+      const featuredPlaylistsData = await spotify.getFeaturedPlaylists(4);
+      // Ensure all cover URIs are strings
+      const sanitizedFeaturedPlaylists = featuredPlaylistsData.map(playlist => ({
+        ...playlist,
+        cover: typeof playlist.cover === 'string' ? playlist.cover : null
+      }));
+      setFeaturedPlaylists(sanitizedFeaturedPlaylists);
+      setSectionErrors(prev => ({...prev, featuredPlaylists: false}));
+    } catch (error) {
+      console.error('Error loading featured playlists:', error);
+      setSectionErrors(prev => ({...prev, featuredPlaylists: true}));
+      setFeaturedPlaylists([]);
+    }
+  };
+
+  // Load top artists separately
+  const loadTopArtists = async () => {
+    try {
+      const topArtistsData = await spotify.getTopArtists(4);
+      // Ensure all image URIs are strings
+      const sanitizedTopArtists = topArtistsData.map(artist => ({
+        ...artist,
+        image: typeof artist.image === 'string' ? artist.image : null
+      }));
+      setTopArtists(sanitizedTopArtists);
+      setSectionErrors(prev => ({...prev, topArtists: false}));
+    } catch (error) {
+      console.error('Error loading top artists:', error);
+      setSectionErrors(prev => ({...prev, topArtists: true}));
+      setTopArtists([]);
+    }
+  };
+
+  // Initialize function that loads all data but doesn't stop if one section fails
+  const initialize = async () => {
+    setIsLoading(true);
+    
+    // Load local data first
+    await loadLocalData();
+    
+    // Load API data in parallel
+    await Promise.allSettled([
+      loadFeaturedPlaylists(),
+      loadTopArtists()
+    ]);
+    
+    setIsLoading(false);
+  };
+
+  // Retry loading for a specific section
+  const retrySection = async (section) => {
+    if (section === 'featuredPlaylists') {
+      await loadFeaturedPlaylists();
+    } else if (section === 'topArtists') {
+      await loadTopArtists();
+    }
+  };
 
   useEffect(() => {
-    const initialize = async () => {
-      try {
-        const [userDataString, recentSongsString, playlistsString] = await Promise.all([
-          AsyncStorage.getItem('userData'),
-          AsyncStorage.getItem('recentSongs'),
-          AsyncStorage.getItem('playlists')
-        ]);
-        
-        if (userDataString) {
-          setUserData(JSON.parse(userDataString));
-        }
-        if (recentSongsString) {
-          setRecentSongs(JSON.parse(recentSongsString));
-        }
-        if (playlistsString) {
-          setPlaylists(JSON.parse(playlistsString));
-        }
-
-        // Sample data for featured playlists and top artists
-        setFeaturedPlaylists([
-          { id: '1', name: 'Chill Vibes', songs: 24, cover: require('../../assets/images/burnaboy.jpeg') },
-          { id: '2', name: 'Workout Mix', songs: 18, cover: require('../../assets/images/burnaboy.jpeg') },
-          { id: '3', name: 'Road Trip', songs: 32, cover: require('../../assets/images/burnaboy.jpeg') },
-          { id: '4', name: 'Party Hits', songs: 40, cover: require('../../assets/images/burnaboy.jpeg') }
-        ]);
-
-        setTopArtists([
-          { id: '1', name: 'The Weeknd', genre: 'R&B / Pop', image: require('../../assets/images/chriss.jpeg') },
-          { id: '2', name: 'Taylor Swift', genre: 'Pop', image: require('../../assets/images/burnaboy.jpeg') },
-          { id: '3', name: 'Kendrick Lamar', genre: 'Hip-Hop', image: require('../../assets/images/joeboy.jpeg') },
-          { id: '4', name: 'Dua Lipa', genre: 'Pop', image: require('../../assets/images/postmalone.jpeg') }
-        ]);
-      } catch (error) {
-        console.error('Error loading data:', error);
-        Alert.alert('Error', 'Failed to load your music data');
-      }
-    };
-
     initialize();
   }, []);
 
@@ -79,7 +169,7 @@ export default function HomeScreen({ navigation, setCurrentSong, currentSong }) 
         isPublic: playlistData.isPublic,
         songs: [],
         createdAt: new Date().toISOString(),
-        coverImage: playlistData.coverImage || require('../../assets/images/burnaboy.jpeg')
+        coverImage: playlistData.coverImage || 'https://placehold.co/400x400/8A2BE2/FFF?text=Playlist'
       };
 
       const updatedPlaylists = [...playlists, newPlaylist];
@@ -92,27 +182,96 @@ export default function HomeScreen({ navigation, setCurrentSong, currentSong }) 
     }
   };
 
-  const viewPlaylist = (playlist) => {
-    setCurrentPlaylist(playlist);
-    setShowPlaylistView(true);
+  const viewPlaylist = async (playlist) => {
+    try {
+      setIsLoading(true);
+      
+      // If it's a Spotify playlist, fetch full details including tracks
+      if (playlist.id && !playlist.id.toString().startsWith('local_')) {
+        try {
+          const fullPlaylistDetails = await spotify.getPlaylistDetails(playlist.id);
+          // Ensure all cover URIs are strings
+          const sanitizedTracks = fullPlaylistDetails.tracks?.map(track => ({
+            ...track,
+            cover: typeof track.cover === 'string' ? track.cover : null
+          })) || [];
+          
+          setCurrentPlaylist({
+            ...fullPlaylistDetails,
+            tracks: sanitizedTracks,
+            coverImage: typeof fullPlaylistDetails.coverImage === 'string' ? 
+              fullPlaylistDetails.coverImage : null
+          });
+        } catch (error) {
+          console.error('Error fetching Spotify playlist:', error);
+          // If API call fails, still show what we have
+          setCurrentPlaylist({
+            ...playlist,
+            coverImage: typeof playlist.coverImage === 'string' ? 
+              playlist.coverImage : null
+          });
+          Alert.alert('Warning', 'Limited playlist details available. Some features may not work.');
+        }
+      } else {
+        // It's a local playlist
+        setCurrentPlaylist({
+          ...playlist,
+          coverImage: typeof playlist.coverImage === 'string' ? 
+            playlist.coverImage : null
+        });
+      }
+      
+      setShowPlaylistView(true);
+    } catch (error) {
+      console.error('Error preparing playlist view:', error);
+      Alert.alert('Error', 'Failed to load playlist details');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const playSong = async (song) => {
     try {
-      // Set the current song to play
-      setCurrentSong(song);
+      // Set the current song to play using the context function
+      const sanitizedSong = {
+        ...song,
+        cover: typeof song.cover === 'string' ? song.cover : null
+      };
       
-      // Navigate to the now playing screen
-      navigation.navigate('NowPlaying');
+      setCurrentSong(sanitizedSong);
+      
+      // Navigate to the now playing screen using router
+      router.navigate('NowPlaying');
       
       // Add to recent songs
-      const updatedRecentSongs = [song, ...recentSongs.filter(s => s.id !== song.id)].slice(0, 10);
+      const updatedRecentSongs = [sanitizedSong, ...recentSongs.filter(s => s.id !== song.id)].slice(0, 10);
       setRecentSongs(updatedRecentSongs);
       await AsyncStorage.setItem('recentSongs', JSON.stringify(updatedRecentSongs));
     } catch (error) {
       console.error('Error playing song:', error);
     }
   };
+
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#8A2BE2" />
+        <Text style={styles.loadingText}>Loading your music...</Text>
+      </View>
+    );
+  }
+
+  const renderSectionHeader = (title, section) => (
+    <View style={styles.sectionHeader}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      {sectionErrors[section] && (
+        <TouchableOpacity onPress={() => retrySection(section)} style={styles.retrySmallButton}>
+          <Ionicons name="refresh" size={18} color="#8A2BE2" />
+          <Text style={styles.retrySmallText}>Retry</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
 
   return (
     <View style={styles.container}>
@@ -126,7 +285,10 @@ export default function HomeScreen({ navigation, setCurrentSong, currentSong }) 
             <Text style={styles.greeting}>Good evening,</Text>
             <Text style={styles.userName}>{userData?.fullName || 'Music Lover'}!</Text>
           </View>
-          <TouchableOpacity style={styles.searchButton}>
+          <TouchableOpacity 
+            style={styles.searchButton}
+            onPress={() => router.push('Search')}
+          >
             <Ionicons name="search" size={24} color="#FFF" />
           </TouchableOpacity>
         </View>
@@ -135,37 +297,55 @@ export default function HomeScreen({ navigation, setCurrentSong, currentSong }) 
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Featured Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Featured Playlists</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScrollContent}>
-            {featuredPlaylists.map(playlist => (
-              <TouchableOpacity 
-                key={playlist.id} 
-                style={styles.featuredItem}
-                onPress={() => viewPlaylist(playlist)}
-              >
-                <Image source={playlist.cover} style={styles.featuredCover} />
-                <Text style={styles.featuredTitle}>{playlist.name}</Text>
-                <Text style={styles.featuredSubtitle}>{playlist.songs} songs</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+          {renderSectionHeader('Featured Playlists', 'featuredPlaylists')}
+          {sectionErrors.featuredPlaylists ? (
+            <View style={styles.errorInline}>
+              <Text style={styles.errorInlineText}>Failed to load featured playlists</Text>
+            </View>
+          ) : (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScrollContent}>
+              {featuredPlaylists.map(playlist => (
+                <TouchableOpacity 
+                  key={playlist.id} 
+                  style={styles.featuredItem}
+                  onPress={() => viewPlaylist(playlist)}
+                >
+                  <Image 
+                    source={safeImageSource(playlist.cover, defaultImage)} 
+                    style={styles.featuredCover} 
+                  />
+                  <Text style={styles.featuredTitle}>{playlist.name}</Text>
+                  <Text style={styles.featuredSubtitle}>{playlist.songs} songs</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
         </View>
 
         {/* Top Artists Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Top Artists</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScrollContent}>
-            {topArtists.map(artist => (
-              <TouchableOpacity 
-                key={artist.id} 
-                style={styles.artistItem}
-              >
-                <Image source={artist.image} style={styles.artistImage} />
-                <Text style={styles.artistName}>{artist.name}</Text>
-                <Text style={styles.artistGenre}>{artist.genre}</Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+          {renderSectionHeader('Top Artists', 'topArtists')}
+          {sectionErrors.topArtists ? (
+            <View style={styles.errorInline}>
+              <Text style={styles.errorInlineText}>Failed to load top artists</Text>
+            </View>
+          ) : (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalScrollContent}>
+              {topArtists.map(artist => (
+                <TouchableOpacity 
+                  key={artist.id} 
+                  style={styles.artistItem}
+                >
+                  <Image 
+                    source={safeImageSource(artist.image, defaultImage)} 
+                    style={styles.artistImage} 
+                  />
+                  <Text style={styles.artistName}>{artist.name}</Text>
+                  <Text style={styles.artistGenre}>{artist.genre}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
         </View>
 
         {/* Recently Played Section */}
@@ -183,7 +363,10 @@ export default function HomeScreen({ navigation, setCurrentSong, currentSong }) 
                 style={styles.songCard}
                 onPress={() => playSong(song)}
               >
-                <Image source={song.cover} style={styles.songCover} />
+                <Image 
+                  source={safeImageSource(song.cover, defaultImage)} 
+                  style={styles.songCover} 
+                />
                 <View style={styles.songDetails}>
                   <Text style={styles.songTitle}>{song.title}</Text>
                   <Text style={styles.songArtist}>{song.artist}</Text>
@@ -191,6 +374,41 @@ export default function HomeScreen({ navigation, setCurrentSong, currentSong }) 
                 <TouchableOpacity style={styles.playButton}>
                   <Ionicons name="play-circle" size={36} color="#8A2BE2" />
                 </TouchableOpacity>
+              </TouchableOpacity>
+            ))
+          )}
+        </View>
+
+       {/* Your Playlists Section */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Your Playlists</Text>
+            <TouchableOpacity onPress={() => setShowAddForm(true)}>
+              <Ionicons name="add-circle" size={24} color="#8A2BE2" />
+            </TouchableOpacity>
+          </View>
+          
+          {playlists.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>No playlists yet</Text>
+              <Text style={styles.emptyStateAction}>Create a playlist to get started</Text>
+            </View>
+          ) : (
+            playlists.map(playlist => (
+              <TouchableOpacity 
+                key={playlist.id} 
+                style={styles.playlistCard}
+                onPress={() => viewPlaylist(playlist)}
+              >
+                <Image 
+                  source={safeImageSource(playlist.coverImage, defaultImage)} 
+                  style={styles.playlistCover} 
+                />
+                <View style={styles.playlistDetails}>
+                  <Text style={styles.playlistTitle}>{playlist.name}</Text>
+                  <Text style={styles.playlistSubtitle}>{playlist.songs?.length || 0} songs</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={24} color="#8A2BE2" />
               </TouchableOpacity>
             ))
           )}
@@ -238,144 +456,213 @@ export default function HomeScreen({ navigation, setCurrentSong, currentSong }) 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#121212'
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#121212'
+  },
+  loadingText: {
+    color: '#FFF',
+    marginTop: 12,
+    fontSize: 16
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#121212',
+    padding: 20
+  },
+  errorText: {
+    color: '#FFF',
+    marginTop: 12,
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 20
+  },
+  retryButton: {
+    backgroundColor: '#8A2BE2',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 20
+  },
+  retryButtonText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '600'
   },
   header: {
-    paddingTop: 50,
+    paddingTop: Platform.OS === 'ios' ? 50 : 40,
     paddingBottom: 20,
-    paddingHorizontal: 20,
+    paddingHorizontal: 20
   },
   headerContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'center'
   },
   greeting: {
+    color: '#FFF',
     fontSize: 16,
-    color: '#E0E0E0',
-    fontWeight: '400',
+    opacity: 0.8
   },
   userName: {
-    fontSize: 24,
     color: '#FFF',
-    fontWeight: '700',
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginTop: 4
   },
   searchButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    padding: 10,
+    borderRadius: 20
   },
   scrollContent: {
-    paddingBottom: 20,
+    paddingBottom: 60
   },
   section: {
-    padding: 20,
+    padding: 20
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12
   },
   sectionTitle: {
+    color: '#FFF',
     fontSize: 22,
     fontWeight: 'bold',
-    marginBottom: 15,
-    color: '#333',
+    marginBottom: 12
   },
   horizontalScrollContent: {
-    paddingRight: 20,
+    paddingRight: 20
   },
   featuredItem: {
     width: 160,
-    marginRight: 15,
+    marginRight: 12
   },
   featuredCover: {
     width: 160,
     height: 160,
-    borderRadius: 8,
-    marginBottom: 10,
+    borderRadius: 8
   },
   featuredTitle: {
+    color: '#FFF',
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
+    marginTop: 8
   },
   featuredSubtitle: {
+    color: '#BBBBBB',
     fontSize: 14,
-    color: '#666',
-    marginTop: 3,
+    marginTop: 4
   },
   artistItem: {
-    alignItems: 'center',
-    marginRight: 20,
-    width: 100,
+    width: 120,
+    marginRight: 12,
+    alignItems: 'center'
   },
   artistImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    marginBottom: 10,
+    width: 120,
+    height: 120,
+    borderRadius: 60
   },
   artistName: {
+    color: '#FFF',
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
-    textAlign: 'center',
+    marginTop: 8,
+    textAlign: 'center'
   },
   artistGenre: {
+    color: '#BBBBBB',
     fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
+    marginTop: 4,
+    textAlign: 'center'
   },
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
     padding: 30,
-    backgroundColor: '#f9f9f9',
-    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 12
   },
   emptyStateText: {
+    color: '#FFF',
     fontSize: 18,
     fontWeight: '600',
-    color: '#666',
-    marginBottom: 10,
+    textAlign: 'center'
   },
   emptyStateAction: {
-    fontSize: 16,
-    color: '#8A2BE2',
-    fontWeight: '500',
+    color: '#BBBBBB',
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: 'center'
   },
   songCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f9f9f9',
-    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 8,
     marginBottom: 10,
-    padding: 10,
+    padding: 10
   },
   songCover: {
-    width: 60,
-    height: 60,
-    borderRadius: 5,
+    width: 50,
+    height: 50,
+    borderRadius: 4
   },
   songDetails: {
     flex: 1,
-    marginLeft: 15,
+    marginLeft: 12
   },
   songTitle: {
+    color: '#FFF',
     fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
+    fontWeight: '600'
   },
   songArtist: {
+    color: '#BBBBBB',
     fontSize: 14,
-    color: '#666',
-    marginTop: 3,
+    marginTop: 4
   },
   playButton: {
-    padding: 5,
+    padding: 5
+  },
+  playlistCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 8,
+    marginBottom: 10,
+    padding: 10
+  },
+  playlistCover: {
+    width: 60,
+    height: 60,
+    borderRadius: 4
+  },
+  playlistDetails: {
+    flex: 1,
+    marginLeft: 12
+  },
+  playlistTitle: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '600'
+  },
+  playlistSubtitle: {
+    color: '#BBBBBB',
+    fontSize: 14,
+    marginTop: 4
   },
   modalContainer: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'flex-end'
+  }
 });
